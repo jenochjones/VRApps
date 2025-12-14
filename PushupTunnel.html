@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>VR Push-Up Tunnel Trainer</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+  <!-- A-Frame -->
+  <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
+
+  <style>
+    body {
+      margin: 0;
+      overflow: hidden;
+      font-family: system-ui, sans-serif;
+      background: black;
+    }
+
+    #hud {
+      position: fixed;
+      top: 10px;
+      left: 10px;
+      color: #0f0;
+      font-size: 16px;
+      z-index: 10;
+    }
+
+    #fail {
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.85);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      color: red;
+      font-size: 48px;
+      font-weight: bold;
+      z-index: 20;
+      text-align: center;
+    }
+
+    #fail small {
+      display: block;
+      font-size: 20px;
+      color: #fff;
+      margin-top: 20px;
+    }
+  </style>
+</head>
+
+<body>
+
+<div id="hud">
+  Time: <span id="time">0.0</span>s<br>
+  Speed: <span id="speed">1.0</span>
+</div>
+
+<div id="fail">
+  FAILED
+  <small>Step back into tunnel to restart</small>
+</div>
+
+<a-scene
+  vr-mode-ui="enabled: true"
+  renderer="colorManagement: true; physicallyCorrectLights: true"
+  background="color: #000"
+>
+
+  <!-- Camera -->
+  <a-entity id="rig">
+    <a-camera
+      id="camera"
+      position="0 1.2 0"
+      wasd-controls="enabled: false"
+      look-controls="pointerLockEnabled: false"
+    ></a-camera>
+  </a-entity>
+
+  <!-- Lights -->
+  <a-light type="ambient" intensity="0.4"></a-light>
+  <a-light type="point" position="0 4 2" intensity="1"></a-light>
+
+  <!-- Tunnel Group -->
+  <a-entity id="tunnel" tunnel-move tunnel-check>
+    <!-- Repeating tunnel segments -->
+    <a-entity geometry="primitive: cylinder; radius: 1.3; height: 6"
+              material="side: double; color: #111; emissive: #0ff; emissiveIntensity: 0.3"
+              position="0 1.2 -3"></a-entity>
+
+    <a-entity geometry="primitive: cylinder; radius: 1.3; height: 6"
+              material="side: double; color: #111; emissive: #0ff; emissiveIntensity: 0.3"
+              position="0 1.2 -9"></a-entity>
+
+    <a-entity geometry="primitive: cylinder; radius: 1.3; height: 6"
+              material="side: double; color: #111; emissive: #0ff; emissiveIntensity: 0.3"
+              position="0 1.2 -15"></a-entity>
+  </a-entity>
+
+</a-scene>
+
+<script>
+/* =========================
+   GAME STATE
+========================= */
+let speed = 1;
+let timeAlive = 0;
+let outOfTunnelTime = 0;
+let failed = false;
+
+/* =========================
+   HUD
+========================= */
+const timeEl = document.getElementById("time");
+const speedEl = document.getElementById("speed");
+const failEl = document.getElementById("fail");
+
+/* =========================
+   TUNNEL MOVEMENT
+========================= */
+AFRAME.registerComponent("tunnel-move", {
+  tick: function (time, delta) {
+    if (failed) return;
+
+    const dz = speed * (delta / 1000);
+
+    this.el.children.forEach(seg => {
+      seg.object3D.position.z += dz;
+
+      if (seg.object3D.position.z > 2) {
+        seg.object3D.position.z = -16;
+      }
+    });
+
+    // Increase difficulty
+    timeAlive += delta / 1000;
+    speed = 1 + timeAlive * 0.15;
+
+    timeEl.textContent = timeAlive.toFixed(1);
+    speedEl.textContent = speed.toFixed(2);
+  }
+});
+
+/* =========================
+   TUNNEL COLLISION CHECK
+========================= */
+AFRAME.registerComponent("tunnel-check", {
+  tick: function (time, delta) {
+    const cam = document.getElementById("camera").object3D;
+    const x = cam.position.x;
+    const y = cam.position.y - 1.2; // normalize height
+    const radius = Math.sqrt(x*x + y*y);
+
+    if (radius > 1.2) {
+      outOfTunnelTime += delta / 1000;
+    } else {
+      outOfTunnelTime = Math.max(0, outOfTunnelTime - delta / 1000);
+    }
+
+    if (outOfTunnelTime > 1.5) {
+      failGame();
+    }
+  }
+});
+
+/* =========================
+   FAIL / RESET
+========================= */
+function failGame() {
+  failed = true;
+  failEl.style.display = "flex";
+
+  setTimeout(() => {
+    resetGame();
+  }, 2000);
+}
+
+function resetGame() {
+  failed = false;
+  speed = 1;
+  timeAlive = 0;
+  outOfTunnelTime = 0;
+  failEl.style.display = "none";
+}
+</script>
+
+</body>
+</html>
+  
