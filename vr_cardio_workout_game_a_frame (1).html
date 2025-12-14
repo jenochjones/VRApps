@@ -1,0 +1,246 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>VR Cardio Arena</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
+  <!-- A-Frame -->
+  <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
+  <!-- Extras for physics & helpers -->
+  <script src="https://cdn.jsdelivr.net/npm/aframe-extras@6.1.1/dist/aframe-extras.min.js"></script>
+
+  <style>
+    body {
+      margin: 0;
+      overflow: hidden;
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+      background: #000;
+    }
+
+    #hud {
+      position: fixed;
+      top: 12px;
+      left: 50%;
+      transform: translateX(-50%);
+      color: #fff;
+      background: rgba(0, 0, 0, 0.55);
+      padding: 10px 18px;
+      border-radius: 14px;
+      display: flex;
+      gap: 20px;
+      font-size: 14px;
+      z-index: 10;
+      backdrop-filter: blur(8px);
+    }
+
+    #hud span {
+      font-weight: 600;
+    }
+
+    #instructions {
+      position: fixed;
+      bottom: 12px;
+      left: 50%;
+      transform: translateX(-50%);
+      color: #eee;
+      background: rgba(0, 0, 0, 0.55);
+      padding: 10px 16px;
+      border-radius: 12px;
+      font-size: 13px;
+      z-index: 10;
+      max-width: 90%;
+      text-align: center;
+    }
+  </style>
+</head>
+<body>
+
+<!-- 2D HUD -->
+<div id="hud">
+  <div>Score: <span id="score">0</span></div>
+  <div>Time: <span id="time">60</span>s</div>
+  <div>Combo: <span id="combo">0</span></div>
+</div>
+
+<div id="instructions">
+  Punch or hit glowing orbs with your VR controllers. Move, dodge, and keep your combo alive for maximum cardio!
+</div>
+
+<a-scene
+  vr-mode-ui="enabled: true"
+  renderer="antialias: true; colorManagement: true"
+  background="color: #05070d"
+  physics="gravity: -9.8">
+
+  <!-- Camera Rig -->
+  <a-entity id="rig" position="0 1.6 4">
+    <a-camera wasd-controls-enabled="false"></a-camera>
+
+    <!-- Left Controller -->
+    <a-entity
+      id="leftHand"
+      laser-controls="hand: left"
+      oculus-touch-controls="hand: left"
+      hand-collider>
+    </a-entity>
+
+    <!-- Right Controller -->
+    <a-entity
+      id="rightHand"
+      laser-controls="hand: right"
+      oculus-touch-controls="hand: right"
+      hand-collider>
+    </a-entity>
+  </a-entity>
+
+  <!-- Arena Floor -->
+  <a-plane
+    rotation="-90 0 0"
+    width="30"
+    height="30"
+    color="#0e1325"
+    shadow>
+  </a-plane>
+
+  <!-- Arena Walls -->
+  <a-entity geometry="primitive: cylinder; radius: 14; height: 5"
+            material="color: #0a0f1f; side: double; opacity: 0.85"
+            position="0 2.5 0">
+  </a-entity>
+
+  <!-- Lighting -->
+  <a-entity light="type: ambient; intensity: 0.4"></a-entity>
+  <a-entity light="type: point; intensity: 1.5; distance: 40" position="0 6 4"></a-entity>
+
+  <!-- Target Spawner -->
+  <a-entity id="spawner" target-spawner></a-entity>
+
+</a-scene>
+
+<script>
+/**********************
+ * GAME STATE
+ **********************/
+let score = 0;
+let combo = 0;
+let timeLeft = 60;
+let gameActive = true;
+
+const scoreEl = document.getElementById('score');
+const comboEl = document.getElementById('combo');
+const timeEl = document.getElementById('time');
+
+/**********************
+ * TIMER
+ **********************/
+const timerInterval = setInterval(() => {
+  if (!gameActive) return;
+  timeLeft--;
+  timeEl.textContent = timeLeft;
+
+  if (timeLeft <= 0) {
+    gameActive = false;
+    clearInterval(timerInterval);
+    document.getElementById('instructions').textContent = 'Workout complete! Final Score: ' + score;
+  }
+}, 1000);
+
+/**********************
+ * HAND COLLIDER
+ **********************/
+AFRAME.registerComponent('hand-collider', {
+  init() {
+    this.el.addEventListener('triggerdown', () => {
+      this.el.object3D.scale.set(1.2, 1.2, 1.2);
+    });
+
+    this.el.addEventListener('triggerup', () => {
+      this.el.object3D.scale.set(1, 1, 1);
+    });
+  }
+});
+
+/**********************
+ * TARGET COMPONENT
+ **********************/
+AFRAME.registerComponent('target', {
+  init() {
+    this.hit = false;
+    this.el.addEventListener('mouseenter', () => this.onHit());
+    this.el.addEventListener('collide', () => this.onHit());
+  },
+
+  onHit() {
+    if (this.hit || !gameActive) return;
+    this.hit = true;
+
+    score += 10 + combo * 2;
+    combo++;
+
+    scoreEl.textContent = score;
+    comboEl.textContent = combo;
+
+    this.el.setAttribute('animation', {
+      property: 'scale',
+      to: '0 0 0',
+      dur: 200,
+      easing: 'easeInOutQuad'
+    });
+
+    setTimeout(() => this.el.remove(), 220);
+  }
+});
+
+/**********************
+ * TARGET SPAWNER
+ **********************/
+AFRAME.registerComponent('target-spawner', {
+  init() {
+    this.spawnRate = 900; // ms
+    this.spawn();
+  },
+
+  spawn() {
+    if (!gameActive) return;
+
+    const target = document.createElement('a-sphere');
+
+    const angle = Math.random() * Math.PI * 2;
+    const radius = 4 + Math.random() * 3;
+
+    const x = Math.cos(angle) * radius;
+    const y = 1.2 + Math.random() * 2.2;
+    const z = Math.sin(angle) * radius;
+
+    target.setAttribute('position', `${x} ${y} ${z}`);
+    target.setAttribute('radius', 0.25);
+    target.setAttribute('color', '#ff3366');
+    target.setAttribute('emissive', '#ff3366');
+    target.setAttribute('target', '');
+
+    target.setAttribute('animation__float', {
+      property: 'position',
+      dir: 'alternate',
+      dur: 800,
+      easing: 'easeInOutSine',
+      loop: true,
+      to: `${x} ${y + 0.3} ${z}`
+    });
+
+    document.querySelector('a-scene').appendChild(target);
+
+    setTimeout(() => {
+      if (!target.parentNode) return;
+      combo = 0;
+      comboEl.textContent = combo;
+      target.remove();
+    }, 2500);
+
+    setTimeout(() => this.spawn(), this.spawnRate);
+  }
+});
+</script>
+
+</body>
+</html>
